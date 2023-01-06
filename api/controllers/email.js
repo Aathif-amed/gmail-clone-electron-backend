@@ -28,130 +28,128 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-export async function getAllEmails(request, response, next) {
+export async function getAllEmails(req, res, next) {
   try {
-    const { mailbox } = await Account.findOne({ _id: request.user })
+    const { mailbox } = await Account.findOne({ _id: req.user })
       .select("mailbox")
       .populate("mailbox.inbox mailbox.outbox mailbox.drafts mailbox.trash");
     console.log("Emails found", mailbox);
 
-    response.status(200).json({ message: "Emails found", mailbox });
+    res.status(200).json({ message: "Emails found", mailbox });
   } catch (error) {
     console.log(error);
-    response.status(500);
+    res.status(500);
   }
 }
 
-export async function sendEmail(request, response, next) {
+export async function sendEmail(req, res, next) {
   try {
-    const validationErrors = validationResult(request);
+    const validationErrors = validationResult(req);
     if (!validationErrors.isEmpty())
-      return response.status(400).json({
-        message: "Invalid data, see response.data.errors for more information",
+      return res.status(400).json({
+        message: "Invalid data, see res.data.errors for more information",
         errors: validationErrors.errors,
       });
 
     const newEmailOut = new Email({
-      from: request.body.from,
-      to: request.body.to,
-      subject: request.body.subject,
-      message: request.body.message,
+      from: req.body.from,
+      to: req.body.to,
+      subject: req.body.subject,
+      message: req.body.message,
     });
     await transporter.sendMail({
-      from: request.body.from,
-      to: request.body.to,
-      subject: request.body.subject,
-      text: request.body.message,
+      from: req.body.from,
+      to: req.body.to,
+      subject: req.body.subject,
+      text: req.body.message,
     });
 
     const savedEmailOut = await newEmailOut.save();
     console.log("Email sent", savedEmailOut);
 
     const newEmailIn = new Email({
-      from: request.body.to,
-      to: request.body.from,
-      subject: "Re: " + request.body.subject,
+      from: req.body.to,
+      to: req.body.from,
+      subject: "Re: " + req.body.subject,
       message: "your email recieved",
     });
     const savedEmailIn = await newEmailIn.save();
     console.log("Reply received", savedEmailIn);
 
-    response
-      .status(201)
-      .json({
-        message: "Email sent, reply received",
-        sent: savedEmailOut,
-        received: savedEmailIn,
-      });
+    res.status(201).json({
+      message: "Email sent, reply received",
+      sent: savedEmailOut,
+      received: savedEmailIn,
+    });
 
-    const foundAccount = await Account.findOne({ _id: request.user });
+    const foundAccount = await Account.findOne({ _id: req.user });
     foundAccount.mailbox.outbox.push(savedEmailOut._id);
     foundAccount.mailbox.inbox.push(savedEmailIn._id);
     await foundAccount.save();
   } catch (error) {
     console.log(error);
-    response.status(500);
+    res.status(500);
   }
 }
 
-export async function saveDraft(request, response, next) {
+export async function saveDraft(req, res, next) {
   try {
     let newDraft = new Email({
-      from: request.body.from,
-      to: request.body.to,
-      subject: request.body.subject,
-      message: request.body.message,
+      from: req.body.from,
+      to: req.body.to,
+      subject: req.body.subject,
+      message: req.body.message,
     });
 
     const savedDraft = await newDraft.save();
     console.log("Draft saved", savedDraft);
 
-    response.status(201).json({ message: "Draft saved", draft: savedDraft });
+    res.status(201).json({ message: "Draft saved", draft: savedDraft });
 
-    const foundAccount = await Account.findOne({ _id: request.user });
+    const foundAccount = await Account.findOne({ _id: req.user });
     foundAccount.mailbox.drafts.push(savedDraft._id);
     await foundAccount.save();
   } catch (error) {
     console.log(error);
-    response.status(500);
+    res.status(500);
   }
 }
 
-export const updateDraft = async (request, response, next) => {
+export const updateDraft = async (req, res, next) => {
   try {
-    let foundDraft = await Email.findOne({ _id: request.params.id });
+    let foundDraft = await Email.findOne({ _id: req.params.id });
     if (!foundDraft)
-      return response
+      return res
         .status(404)
-        .json({ message: "Email not found", id: request.params.id });
+        .json({ message: "Email not found", id: req.params.id });
 
-    foundDraft.to = request.body.to;
-    foundDraft.subject = request.body.subject;
-    foundDraft.message = request.body.message;
+    foundDraft.to = req.body.to;
+    foundDraft.subject = req.body.subject;
+    foundDraft.message = req.body.message;
 
     const savedDraft = await foundDraft.save();
     console.log("Draft updated", savedDraft);
 
-    response.status(200).json({ message: "Draft updated", draft: savedDraft });
+    res.status(200).json({ message: "Draft updated", draft: savedDraft });
   } catch (error) {
     console.log(error);
-    response.status(500);
+    res.status(500);
   }
 };
 
-export async function moveToTrash(request, response, next) {
+export async function moveToTrash(req, res, next) {
   try {
-    const foundUser = await Account.findOne({ _id: request.user });
+    const foundUser = await Account.findOne({ _id: req.user });
 
     let { inbox, outbox, drafts, trash } = foundUser.mailbox;
     let isEmailFound = false;
 
     if (!isEmailFound)
       for (let i = 0; i < inbox.length; i++) {
-        if (inbox[i].equals(request.params.id)) {
+        if (inbox[i].equals(req.params.id)) {
           trash.push(inbox[i]);
           inbox.splice(i, 1);
-          console.log("Moved from inbox to trash", request.params.id);
+          console.log("Moved from inbox to trash", req.params.id);
           isEmailFound = true;
           break;
         }
@@ -159,10 +157,10 @@ export async function moveToTrash(request, response, next) {
 
     if (!isEmailFound)
       for (let i = 0; i < outbox.length; i++) {
-        if (outbox[i].equals(request.params.id)) {
+        if (outbox[i].equals(req.params.id)) {
           trash.push(outbox[i]);
           outbox.splice(i, 1);
-          console.log("Moved from outbox to trash", request.params.id);
+          console.log("Moved from outbox to trash", req.params.id);
           isEmailFound = true;
           break;
         }
@@ -170,10 +168,10 @@ export async function moveToTrash(request, response, next) {
 
     if (!isEmailFound)
       for (let i = 0; i < drafts.length; i++) {
-        if (drafts[i].equals(request.params.id)) {
+        if (drafts[i].equals(req.params.id)) {
           trash.push(drafts[i]);
           drafts.splice(i, 1);
-          console.log("Moved from drafts to trash", request.params.id);
+          console.log("Moved from drafts to trash", req.params.id);
           isEmailFound = true;
           break;
         }
@@ -185,22 +183,22 @@ export async function moveToTrash(request, response, next) {
       "mailbox.inbox mailbox.outbox mailbox.drafts mailbox.trash"
     );
 
-    response.status(200).json({ message: "Moved to trash", mailbox });
+    res.status(200).json({ message: "Moved to trash", mailbox });
   } catch (error) {
     console.log(error);
-    response.status(500);
+    res.status(500);
   }
 }
 
-export async function removeFromTrash(request, response, next) {
+export async function removeFromTrash(req, res, next) {
   try {
-    const foundUser = await Account.findOne({ _id: request.user }).populate(
+    const foundUser = await Account.findOne({ _id: req.user }).populate(
       "mailbox.inbox mailbox.outbox mailbox.drafts mailbox.trash"
     );
 
     const { inbox, outbox, drafts, trash } = foundUser.mailbox;
     for (let i = 0; i < trash.length; i++) {
-      if (trash[i]._id.equals(request.params.id)) {
+      if (trash[i]._id.equals(req.params.id)) {
         if (
           trash[i].to === "" ||
           trash[i].subject === "" ||
@@ -208,15 +206,15 @@ export async function removeFromTrash(request, response, next) {
         ) {
           drafts.push(trash[i]._id);
           trash.splice(i, 1);
-          console.log("Moved from trash to drafts", request.params.id);
+          console.log("Moved from trash to drafts", req.params.id);
         } else if (trash[i].from === foundUser.email) {
           outbox.push(trash[i]._id);
           trash.splice(i, 1);
-          console.log("Moved from trash to outbox", request.params.id);
+          console.log("Moved from trash to outbox", req.params.id);
         } else {
           inbox.push(trash[i]._id);
           trash.splice(i, 1);
-          console.log("Moved from trash to inbox", request.params.id);
+          console.log("Moved from trash to inbox", req.params.id);
         }
 
         break;
@@ -229,22 +227,22 @@ export async function removeFromTrash(request, response, next) {
       "mailbox.inbox mailbox.outbox mailbox.drafts mailbox.trash"
     );
 
-    response.status(200).json({ message: "Removed from trash", mailbox });
+    res.status(200).json({ message: "Removed from trash", mailbox });
   } catch (error) {
     console.log(error);
-    response.status(500);
+    res.status(500);
   }
 }
 
-export async function toggleEmailProperty(request, response, next) {
+export async function toggleEmailProperty(req, res, next) {
   try {
-    const foundEmail = await Email.findOne({ _id: request.params.id });
+    const foundEmail = await Email.findOne({ _id: req.params.id });
     if (!foundEmail)
-      return response
+      return res
         .status(404)
-        .json({ message: "Email not found", id: request.params.id });
+        .json({ message: "Email not found", id: req.params.id });
 
-    switch (request.params.toggle) {
+    switch (req.params.toggle) {
       case "read":
         foundEmail.read = true;
         break;
@@ -258,40 +256,36 @@ export async function toggleEmailProperty(request, response, next) {
         foundEmail.favorite = false;
         break;
       default:
-        return response
+        return res
           .status(404)
-          .json({ message: "Wrong params, can't parse request" });
+          .json({ message: "Wrong params, can't parse req" });
     }
 
     const savedEmail = await foundEmail.save();
-    console.log(`${request.params.toggle} status updated`, savedEmail);
+    console.log(`${req.params.toggle} status updated`, savedEmail);
 
-    response
-      .status(200)
-      .json({
-        message: `${request.params.toggle} status updated`,
-        email: savedEmail,
-      });
+    res.status(200).json({
+      message: `${req.params.toggle} status updated`,
+      email: savedEmail,
+    });
   } catch (error) {
     console.log(error);
-    response.status(500);
+    res.status(500);
   }
 }
 
-export async function deleteEmail(request, response, next) {
+export async function deleteEmail(req, res, next) {
   try {
-    await Email.deleteOne({ _id: request.params.id });
-    console.log("Email deleted", request.params.id);
+    await Email.deleteOne({ _id: req.params.id });
+    console.log("Email deleted", req.params.id);
 
-    response
-      .status(200)
-      .json({ message: "Email deleted", id: request.params.id });
+    res.status(200).json({ message: "Email deleted", id: req.params.id });
 
-    const foundAccount = await Account.findOne({ _id: request.user });
+    const foundAccount = await Account.findOne({ _id: req.user });
     let isEmailFound = false;
     let trashbox = foundAccount.mailbox.trash;
     for (let i = 0; i < trashbox.length; i++) {
-      if (trashbox[i].equals(request.params.id)) {
+      if (trashbox[i].equals(req.params.id)) {
         trashbox.splice(i, 1);
         isEmailFound = true;
         break;
@@ -300,7 +294,7 @@ export async function deleteEmail(request, response, next) {
     if (!isEmailFound) {
       let drafts = foundAccount.mailbox.drafts;
       for (let i = 0; i < drafts.length; i++) {
-        if (drafts[i].equals(request.params.id)) {
+        if (drafts[i].equals(req.params.id)) {
           drafts.splice(i, 1);
           break;
         }
@@ -309,6 +303,6 @@ export async function deleteEmail(request, response, next) {
     await foundAccount.save();
   } catch (error) {
     console.log(error);
-    response.status(500);
+    res.status(500);
   }
 }
