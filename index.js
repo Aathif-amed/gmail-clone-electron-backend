@@ -24,12 +24,12 @@ const DEPRECATED_FIX = { useNewUrlParser: true, useUnifiedTopology: true, useCre
 // connect to db
 mongoose
   .connect(MONGO_URI, DEPRECATED_FIX)
-  .catch((error) => console.log('❌ MongoDB connection error', error)); // listen for errors on initial connection
+  .catch((error) => console.log('MongoDB connection error', error)); // listen for errors on initial connection
 
 const db = mongoose.connection;
-db.on('connected', () => console.log('✅ MongoDB connected')); // connected
-db.on('disconnected', () => console.log('❌ MongoDB disconnected')); // disconnected
-db.on('error', (error) => console.log('❌ MongoDB connection error', error)); // listen for errors during the session
+db.on('connected', () => console.log('MongoDB connected')); // connected
+db.on('disconnected', () => console.log(' MongoDB disconnected')); // disconnected
+db.on('error', (error) => console.log('MongoDB connection error', error)); // listen for errors during the session
 
 // routes
 app.get('/', (request, response, next) => response.status(200).json('MERN Gmail clone'));
@@ -39,6 +39,6 @@ app.use('/email', emailRoutes);
 // server is listening for requests
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
-  console.log(`✅ Server is listening on port: ${PORT}`);
+  console.log(`Server is listening on port: ${PORT}`);
 
 });
